@@ -34,9 +34,13 @@ include_directories(./include/3rdparty)
 include_directories(./include/3rdparty/drm/include/libdrm)
 include_directories(./include/3rdparty/rga/include)
 add_definitions(-DRKAIQ)
-
+add_definitions(-DDEBUG)
 project(alientek)
-add_library(atk_face_recognition SHARED atk_rockx_face_recognition.cpp face_database.cpp postprocess.cc nap_test.cpp drm_func.c rga_func.c) 
+
+add_library(atk_face_recognition SHARED atk_rockx_face_recognition.cpp face_database.cpp postprocess.cc nap_test.cpp drm_func.c rga_func.c my_utils.cpp) 
 target_link_libraries(atk_face_recognition ${OPENCV_LIBS} ${RKNN_LIBS} ${RKMEDIA_LIBS} pthread dl)
 add_executable(import_face_library import_face_library.cpp face_database.cpp)
 target_link_libraries(import_face_library ${OPENCV_LIBS} ${RKMEDIA_LIBS} ${RKNN_LIBS} pthread dl)
+
+#add_executable(atk_face_recognition atk_rockx_face_recognition.cpp face_database.cpp postprocess.cc nap_test.cpp drm_func.c rga_func.c my_utils.cpp)
+#target_link_libraries(atk_face_recognition ${OPENCV_LIBS} ${RKNN_LIBS} ${RKMEDIA_LIBS} pthread dl)

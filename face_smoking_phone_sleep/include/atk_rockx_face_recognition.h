@@ -27,19 +27,20 @@
 #include "rknn_api.h"
 #include "postprocess.h"
 #include "nap_test.h"
+#include "my_utils.h"
 
 #define True 1
 #define False 0
 
-typedef struct {
-  void *file;
-  size_t size;
-}FaceRecognitionFrame;
-string get_hcb();
-float cosine_similarity(const float* vec1, const float* vec2, int size);
-FaceRecognitionFrame *GetFaceRecognitionMediaBuffer();
-FaceRecognitionFrame *GetFace();
 extern bool atk_face_recognition_quit;
+extern int face_size;
+extern int face_xstart;
+extern int face_ystart;
+extern RK_U32 video_width;
+extern RK_U32 video_height;
+
 int atk_recognition_init();
 void *rkmedia_vi_face_thread(void *args);
+static void printRKNNTensor(rknn_tensor_attr *attr);
+static unsigned char *load_model(const char *filename, int *model_size);
 #endif
