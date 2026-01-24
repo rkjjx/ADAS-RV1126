@@ -10,11 +10,16 @@ from rknn.api import RKNN
 import cv2
 
 
-ONNX_MODEL = './model_data/mobilefacenet/mobilefacenet.onnx'  # onnx 模型的路径
-RKNN_MODEL = './model_data/mobilefacenet/mobilefacenet.rknn'  # 转换后的 RKNN 模型保存路径
-DATASET = './model_data/webface/dataset.txt'  # 数据集文件路径
+#ONNX_MODEL = '/home/alientek/ADAS/model_trans/model_data_new/ultralytics_yolov5/yolov5s_v4.0/best.onnx'  # onnx 模型的路径
+#RKNN_MODEL = '/home/alientek/ADAS/model_trans/model_data_new/ultralytics_yolov5/yolov5s_v4.0/best.rknn'  # 转换后的 RKNN 模型保存路径
+#DATASET = './model_data/faceland/dataset.txt'  # 数据集文件路径
 
-QUANTIZE_ON = False  # 是否进行量化
+ONNX_MODEL = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/mobilefacenet.onnx'  # onnx 模型的路径
+RKNN_MODEL = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/mobilefacenet.rknn'  # 转换后的 RKNN 模型保存路径
+DATASET = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/dataset.txt'  # 数据集文件路径
+
+
+QUANTIZE_ON = True  # 是否进行量化
 
 if __name__ == '__main__':
 

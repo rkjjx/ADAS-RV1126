@@ -90,8 +90,8 @@ void img_resize_slow(rga_context *rga_ctx, void *src_virt, int src_w, int src_h,
 
         dst.nn.nn_flag = 0;
 
-        rga_set_rect(&src.rect, 0, 0, src_w, src_h, src_w, src_h, RK_FORMAT_RGB_888);
-        rga_set_rect(&dst.rect, 0, 0, dst_w, dst_h, dst_w, dst_h, RK_FORMAT_RGB_888);
+        rga_set_rect(&src.rect, 0, 0, src_w, src_h, src_w, src_h, RK_FORMAT_BGR_888);
+        rga_set_rect(&dst.rect, 0, 0, dst_w, dst_h, dst_w, dst_h, RK_FORMAT_BGR_888);
 
         ret = rga_ctx->blit_func(&src, &dst, NULL);
         if (ret)

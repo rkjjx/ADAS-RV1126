@@ -11,7 +11,7 @@ int main(int argc, char *argv[])
  
   if (argc != 3) 
   {
-    printf("Usage: ./import_face_library  id face_name face_path\n");
+    printf("Usage: ./import_face_library  face_name face_image_path\n");
     return -1;
   }
 
@@ -23,20 +23,7 @@ int main(int argc, char *argv[])
     printf("Failed to load image\n");
     return 1;
   }
-  int target_width = 112;
-  int target_height = 112;
-  int target_channels = 3; // RGB
-
-  unsigned char *resized_img = (unsigned char *)malloc(target_width * target_height * target_channels);
-  if (!resized_img) {
-    printf("Failed to allocate memory for resized image\n");
-    stbi_image_free(img);
-    return 1;
-  }
-  printf("end of reading image.\n");
-  stbir_resize_uint8(img, width, height, 0, resized_img, target_width, target_height, 0, target_channels);
-  printf("end of resizing image.\n");
-  run_face_recognize(name, resized_img);
+  run_face_recognize(name, img);
 
   return 0;
 }
@@ -49,36 +36,6 @@ static void printRKNNTensor(rknn_tensor_attr *attr)
          attr->qnt_type, attr->fl, attr->zp, attr->scale);
 }
 
-rockx_object_t *get_max_face(rockx_object_array_t *face_array) 
-{
-  int i;
-  rockx_object_t *max_face = NULL;
-
-  if (face_array->count == 0) 
-  {
-    return NULL;
-  }
-  
-  for (i = 0; i < face_array->count; i++) 
-  {
-    rockx_object_t *cur_face = &(face_array->object[i]);
-    if (max_face == NULL) 
-    {
-      max_face = cur_face;
-      continue;
-    }
-    int cur_face_box_area = (cur_face->box.right - cur_face->box.left) *
-                            (cur_face->box.bottom - cur_face->box.top);
-    int max_face_box_area = (max_face->box.right - max_face->box.left) *
-                            (max_face->box.bottom - max_face->box.top);
-    if (cur_face_box_area > max_face_box_area) 
-    {
-      max_face = cur_face;
-    }
-  }
-  printf("get_max_face %d\n", i);
-  return max_face;
-}
 static unsigned char *load_model(const char *filename, int *model_size)
 {
   FILE *fp = fopen(filename, "rb");
@@ -115,7 +72,7 @@ int run_face_recognize(const char *name, unsigned char *in_image)
   unsigned char *model;
   // Load RKNN Model
   int model_len = 0;
-  static char *model_path = "/demo/bin/mobilefacenet.rknn";
+  static char *model_path = "/demo/bin/mobilefacenet.pre.rknn";
   printf("Loading model ...\n");            
   model = load_model(model_path, &model_len);
   ret = rknn_init(&ctx, model, model_len, 0);
@@ -230,7 +187,6 @@ int run_face_recognize(const char *name, unsigned char *in_image)
     res[i] = ((float)(*ptr++) - 124)*0.020613;
   }
   */
-  rknn_outputs_release(ctx, io_num.n_output, outputs);
   printf("FEATURE_SIZE=%d\n",FEATURE_SIZE);
   insert_face_data_to_database(name, FEATURE_SIZE, (float*)outputs[0].buf);
   rknn_outputs_release(ctx, 1, outputs);

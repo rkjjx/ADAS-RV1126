@@ -1,0 +1,16 @@
+D Using CPPUTILS: True
+D target set by user is: rv1126
+D adb path: /usr/bin/adb
+D adb path: /usr/bin/adb
+D Starting ntp or adb, target is RV1126, host is None
+I Device [20230331RV1126FD2G0033] not found in ntb device list.
+D Start adb...
+E Connect to Device Failure (-1)
+E Catch exception when init runtime!
+E Traceback (most recent call last):
+E   File "rknn/api/rknn_base.py", line 907, in rknn.api.rknn_base.RKNNBase.init_runtime
+E   File "rknn/api/rknn_runtime.py", line 171, in rknn.api.rknn_runtime.RKNNRuntime.__init__
+E   File "rknn/api/rknn_platform_utils.py", line 321, in rknn.api.rknn_platform_utils.start_ntp_or_adb
+E Exception: Init runtime environment failed!
+E Please feedback the detailed log file <log_feedback_to_the_rknn_toolkit_dev_team.log> to the RKNN Toolkit development team.
+E You can also check github issues: https://github.com/rockchip-linux/rknn-toolkit/issues

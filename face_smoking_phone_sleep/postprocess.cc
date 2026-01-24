@@ -75,6 +75,7 @@ int loadLabelName(const char *locationFilename, char *label[])
 {
     printf("loadLabelName %s\n", locationFilename);
     readLines(locationFilename, label, OBJ_CLASS_NUM);
+    printf("loadLabelName end\n");
     return 0;
 }
 
@@ -87,27 +88,40 @@ static float CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0
     return u <= 0.f ? 0.f : (i / u);
 }
 
-static int nms(int validCount, std::vector<float> &outputLocations, std::vector<int> &order, float threshold)
+static int nms(int validCount, std::vector<float> &outputLocations, std::vector<int> &classIds, std::vector<int> &order, float threshold)
 {
     for (int i = 0; i < validCount; ++i)
     {
+        // 如果当前框已经被抑制，跳过
         if (order[i] == -1)
         {
             continue;
         }
         int n = order[i];
+        // 提取基准框 n 的坐标
+        float xmin0 = outputLocations[n * 4 + 0];
+        float ymin0 = outputLocations[n * 4 + 1];
+        float xmax0 = outputLocations[n * 4 + 0] + outputLocations[n * 4 + 2];
+        float ymax0 = outputLocations[n * 4 + 1] + outputLocations[n * 4 + 3];
+
         for (int j = i + 1; j < validCount; ++j)
         {
             int m = order[j];
+            
+            // 如果待比较框已经被抑制，跳过
             if (m == -1)
             {
                 continue;
             }
-            float xmin0 = outputLocations[n * 4 + 0];
-            float ymin0 = outputLocations[n * 4 + 1];
-            float xmax0 = outputLocations[n * 4 + 0] + outputLocations[n * 4 + 2];
-            float ymax0 = outputLocations[n * 4 + 1] + outputLocations[n * 4 + 3];
 
+            // 1. 类别不同，互不影响，直接跳过
+            if (classIds[n] != classIds[m])
+            {
+                continue;
+            }
+            // ------------------------
+
+            // 2. 标准 NMS 逻辑：计算 IoU
             float xmin1 = outputLocations[m * 4 + 0];
             float ymin1 = outputLocations[m * 4 + 1];
             float xmax1 = outputLocations[m * 4 + 0] + outputLocations[m * 4 + 2];
@@ -160,61 +174,7 @@ static int quick_sort_indice_inverse(
     }
     return low;
 }
-static int filterClass2Targets(std::vector<float> &boxes, std::vector<float> &boxScores, std::vector<int> &classId)
-{
-    // 记录classId为2的索引
-    std::vector<int> class2Indices;
 
-    // 遍历classId，找到所有classId为2的索引
-    for (int i = 0; i < classId.size(); ++i)
-    {
-        if (classId[i] == 2)
-        {
-            class2Indices.push_back(i);
-        }
-    }
-
-    // 如果没有找到classId为2的目标，直接返回0
-    if (class2Indices.empty()) return 0;
-
-    // 找到boxScores中得分最高的classId为2的索引
-    int maxScoreIndex = class2Indices[0];
-    float maxScore = boxScores[class2Indices[0]];
-
-    for (int i = 1; i < class2Indices.size(); ++i)
-    {
-        int idx = class2Indices[i];
-        if (boxScores[idx] > maxScore)
-        {
-            maxScore = boxScores[idx];
-            maxScoreIndex = idx;
-        }
-    }
-
-    // 记录删除的classId数量
-    int deleteCount = 0;
-
-    // 反向遍历class2Indices，删除所有不是maxScoreIndex的目标
-    for (int i = class2Indices.size() - 1; i >= 0; --i)
-    {
-        int idx = class2Indices[i];
-        if (idx != maxScoreIndex)
-        {
-            // 删除boxes（每个box有4个float）
-            boxes.erase(boxes.begin() + idx * 4, boxes.begin() + (idx + 1) * 4);
-
-            // 删除对应的boxScores和classId
-            boxScores.erase(boxScores.begin() + idx);
-            classId.erase(classId.begin() + idx);
-
-            // 统计删除的classId数量
-            deleteCount++;
-        }
-    }
-
-    // 返回删除的classId数量
-    return deleteCount;
-}
 
 
 static float sigmoid(float x)
@@ -267,27 +227,6 @@ static int process(uint8_t *input, int *anchor, int grid_h, int grid_w, int heig
                 uint8_t box_confidence = in_ptr[4]; // 第 4 个值为置信度
                 if (box_confidence >= thres_u8)
                 {
-                    float box_x = sigmoid(deqnt_affine_to_f32(in_ptr[0], zp, scale)) * 2.0 - 0.5;
-                    float box_y = sigmoid(deqnt_affine_to_f32(in_ptr[1], zp, scale)) * 2.0 - 0.5;
-                    float box_w = sigmoid(deqnt_affine_to_f32(in_ptr[2], zp, scale)) * 2.0;
-                    float box_h = sigmoid(deqnt_affine_to_f32(in_ptr[3], zp, scale)) * 2.0;
-
-                    box_x = (box_x + j) * (float)stride;
-                    box_y = (box_y + i) * (float)stride;
-                    box_w = box_w * box_w * (float)anchor[a * 2];
-                    box_h = box_h * box_h * (float)anchor[a * 2 + 1];
-                    box_x -= (box_w / 2.0);
-                    box_y -= (box_h / 2.0);
-
-                    boxes.push_back(box_x);
-                    boxes.push_back(box_y);
-                    boxes.push_back(box_w);
-                    boxes.push_back(box_h);
-                    //printf("start\n");
-                    float box_conf_f32 = sigmoid(deqnt_affine_to_f32(box_confidence, zp, scale));
-                    //printf("box_conf_f32 = %f\t", box_conf_f32);
-                    boxScores.push_back(box_conf_f32);
-
                     // 找到最大的类别概率
                     uint8_t maxClassProbs = in_ptr[5];
                     
@@ -303,9 +242,29 @@ static int process(uint8_t *input, int *anchor, int grid_h, int grid_w, int heig
                             maxClassProbs = prob;
                         }
                     }
-                    //printf("end\n");
+                    float box_conf_f32 = sigmoid(deqnt_affine_to_f32(box_confidence, zp, scale))*sigmoid(deqnt_affine_to_f32(in_ptr[5+maxClassId], zp, scale));
+                    //printf("box_conf_f32 = %f\t", box_conf_f32);
+                    boxScores.push_back(box_conf_f32);
                     classId.push_back(maxClassId);
                     validCount++;
+
+					float box_x = sigmoid(deqnt_affine_to_f32(in_ptr[0], zp, scale)) * 2.0 - 0.5;
+                    float box_y = sigmoid(deqnt_affine_to_f32(in_ptr[1], zp, scale)) * 2.0 - 0.5;
+                    float box_w = sigmoid(deqnt_affine_to_f32(in_ptr[2], zp, scale)) * 2.0;
+                    float box_h = sigmoid(deqnt_affine_to_f32(in_ptr[3], zp, scale)) * 2.0;
+
+                    box_x = (box_x + j) * (float)stride;
+                    box_y = (box_y + i) * (float)stride;
+                    box_w = box_w * box_w * (float)anchor[a * 2];
+                    box_h = box_h * box_h * (float)anchor[a * 2 + 1];
+                    box_x -= (box_w / 2.0);
+                    box_y -= (box_h / 2.0);
+
+                    boxes.push_back(box_x);
+                    boxes.push_back(box_y);
+                    boxes.push_back(box_w);
+                    boxes.push_back(box_h);
+
                 }
             }
         }
@@ -362,8 +321,6 @@ int post_process(uint8_t *input0, uint8_t *input1, uint8_t *input2, int model_in
     {
         return 0;
     }
-    int deleteCount = filterClass2Targets(filterBoxes, boxesScore, classId);
-    validCount -= deleteCount;
     std::vector<int> indexArray;
     for (int i = 0; i < validCount; ++i)
     {
@@ -372,7 +329,7 @@ int post_process(uint8_t *input0, uint8_t *input1, uint8_t *input2, int model_in
 
     quick_sort_indice_inverse(boxesScore, 0, validCount - 1, indexArray);
 
-    nms(validCount, filterBoxes, indexArray, nms_threshold);
+	nms(validCount, filterBoxes, classId,indexArray, nms_threshold);
 
     int last_count = 0;
     int k = 1;
@@ -403,7 +360,6 @@ int post_process(uint8_t *input0, uint8_t *input1, uint8_t *input2, int model_in
         last_count++;
     }
     group->count = last_count;
-
     return 0;
 }
 int get_result_hcb(float *input, float (*res)[98][2], float *input_1, float (*res_1)[3])
