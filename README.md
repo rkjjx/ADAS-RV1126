@@ -55,13 +55,13 @@ MIPI CSI接口 x2
 
 <img src="./assets/yolov5s-4.0.png" alt="yolov5s-4.0" style="zoom: 50%;" />
 
--**Focus**：Slice + Concat + Conv
--**Conv**：Conv2D + BatchNorm + SiLU
--**C3**：Conv + Concat + ADD+Concat
--**SPP**：MaxPool + Concat
--**Upsample**
--**Concat**
--**Detect**：Conv + Sigmoid + Reshape + MatMul
+- **Focus**：Slice + Concat + Conv
+- **Conv**：Conv2D + BatchNorm + SiLU
+- **C3**：Conv + Concat + ADD+Concat
+- **SPP**：MaxPool + Concat
+- **Upsample**
+- *Concat
+- Detect**：Conv + Sigmoid + Reshape + MatMul
 
 <img src="./assets/precision_recall_curve.png" alt="precision_recall_curve" style="zoom: 33%;" />
 
