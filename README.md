@@ -6,24 +6,24 @@
 
 <img src="./assets/QQ_1768188581099.png" alt="QQ_1768188581099" style="zoom: 33%;" />
 
-**CPU**:四核ARM Cortex-A7 1.5GHZ and RISC-V MCU 200MHZ
+**CPU**：四核ARM Cortex-A7 1.5GHZ and RISC-V MCU 200MHZ
 
 **14M ISP with 3帧HDR**：完成从RAW数据到可观看图像（YUV/RGB）的全套流水线处理。最大支持1400W像素分辨率的图像输入。
 
-**NPU：**2.0Tops NPU，support INT8/INT16
+**NPU**：2.0Tops NPU，support INT8/INT16
 
 > Tops表示NPU在INT8精度下理论计算峰值是每秒2万亿次操作（乘加运算MAC，一次MAC算2次操作），如果是INT16则算力约为1Tops
 >
 
-**VDPU52X(H.264/H.265)：**视频解码硬件单元，用于将压缩视频码流解码为YUV帧，支持H.264/H.265
+**VDPU52X(H.264/H.265)**：视频解码硬件单元，用于将压缩视频码流解码为YUV帧，支持H.264/H.265
 
-**VEPU34X(H.264/H.265)：**视频编码硬件单元，用于将原始图像（YUV）压缩为视频码流
+**VEPU34X(H.264/H.265)**：视频编码硬件单元，用于将原始图像（YUV）压缩为视频码流
 
-**JEPG Encoder/JEPG Decoder：**JPEG硬件编解码单元，用于抓拍照片，YUV/RGB<->JPEG
+**JEPG Encoder/JEPG Decoder**：JPEG硬件编解码单元，用于抓拍照片，YUV/RGB<->JPEG
 
-**RGA2 e plus：**2D图像图形处理单元，支持图像缩放、颜色空间转换（YUV<->RGB）、裁剪、旋转等
+**RGA2 e plus**：2D图像图形处理单元，支持图像缩放、颜色空间转换（YUV<->RGB）、裁剪、旋转等
 
-**IEP：**图像增强处理单元，用于图像增强和降噪
+**IEP**：图像增强处理单元，用于图像增强和降噪
 
 #### 1.1.2正点原子PCB板（包括核心板与底板）
 
@@ -43,25 +43,25 @@ MIPI CSI接口 x2
 
 
 
-在嵌入式领域，摄像头模组分为两类:one:YUV Sensor（自带ISP），即摄像头模组里集成了一个小芯片ISP。优点：MCU接上就能用，省事。缺点：画质差，功能弱。这种摄像头不需要RV1126的ISP:two:RAW Sensor（不带ISP），即摄像头模组里只有传感器。如IMX415，它只管吐出RAW数据，必须依赖RV1126内部强大的14M ISP来处理这些数据。优点：画质好
+在嵌入式领域，摄像头模组分为两类（1）UV Sensor（自带ISP），即摄像头模组里集成了一个小芯片ISP。优点：MCU接上就能用，省事。缺点：画质差，功能弱。这种摄像头不需要RV1126的ISP（2）AW Sensor（不带ISP），即摄像头模组里只有传感器。如IMX415，它只管吐出RAW数据，必须依赖RV1126内部强大的14M ISP来处理这些数据。优点：画质好
 
 ## 2.模型
 
 ### 2.1RKNN_OP_Support_And_Limit
 
-**RKNN_OP_Support_：**convolution  2D、batchnorm2d、silu(swish)、slice、cat、max_pool2d、upsample_nearest2d、add、sigmoid、reshape、matmul
+**RKNN_OP_Support**：convolution  2D、batchnorm2d、silu(swish)、slice、cat、max_pool2d、upsample_nearest2d、add、sigmoid、reshape、matmul
 
 ### 2.2YoLv5s三分类目标检测（人脸、手机、吸烟）
 
 <img src="./assets/yolov5s-4.0.png" alt="yolov5s-4.0" style="zoom: 50%;" />
 
-**Focus：**Slice + Concat + Conv
-**Conv：**Conv2D + BatchNorm + SiLU
-**C3：**Conv + Concat + ADD+Concat
-**SPP：**MaxPool + Concat
+**Focus**：Slice + Concat + Conv
+**Conv**：Conv2D + BatchNorm + SiLU
+**C3**：Conv + Concat + ADD+Concat
+**SPP**：MaxPool + Concat
 **Upsample**
 **Concat**
-**Detect：**Conv + Sigmoid + Reshape + MatMul
+**Detect**：Conv + Sigmoid + Reshape + MatMul
 
 <img src="./assets/precision_recall_curve.png" alt="precision_recall_curve" style="zoom: 33%;" />
 
@@ -101,7 +101,7 @@ RV1126芯片搭载的是瑞芯微自研的NPU，算力约为2.0 TOPS，其核心
 
 量化模型使用较低的精度(int8/uint8/int16)保存模型权重信息。在部署时可以使用更少的存储空间，获得更快的推理速度。各深度学习框架训练、保存模型时，通常使用浮点数据，所以模型量化是模型转换中非常重要的一环.
 
-RKNN-Toolkit目前支持两种量化模型:one:RKNN Toolkit根据用户提供的量化数据集，对加载的浮点模型进行量化，生成量化的RKNN模型。支持的量化精度类型uint8、int8、int16，量化方式为训练后静态量化，量化粒度per-layer，不支持per-channel:two:由深度学习框架导出量化模型，RKNN Toolkit根据量化信息生成量化RKNN模型。支持的深度学习框架，pytorchv1.9.0、onnx（onnxruntimev1.5.1），支持的量化精度类类型，uint8、int8，量化方式，训练后静态量化、QAT
+RKNN-Toolkit目前支持两种量化模型（1）RKNN Toolkit根据用户提供的量化数据集，对加载的浮点模型进行量化，生成量化的RKNN模型。支持的量化精度类型uint8、int8、int16，量化方式为训练后静态量化，量化粒度per-layer，不支持per-channel（2）由深度学习框架导出量化模型，RKNN Toolkit根据量化信息生成量化RKNN模型。支持的深度学习框架，pytorchv1.9.0、onnx（onnxruntimev1.5.1），支持的量化精度类类型，uint8、int8，量化方式，训练后静态量化、QAT
 
 训练后静态量化支持三种方式，默认第一种，也是谷歌提出的方法
 
@@ -112,15 +112,15 @@ PTQ 是“死量化”，模型量化参数固定，推理引擎只要支持 INT
 
 **为什么要校准数据集**
 
-在深度学习中，数据流过每一层时，产生的中间结果图（特征图/Activation）的数值范围是动态变化的。Layer1的输出可能在0~1之间，Layer100的输出可能在-100~200之间。当把float32（范围极大）转化为INT8（-128~127，只有这256个格子）时，必须决定这256个格子代表多大的范围。
+在深度学习中，数据流过每一层时，产生的中间结果图（特征图/Activation）的数值范围是动态变化的。Layer1的输出可能在0\~1之间，Layer100的输出可能在-100\~200之间。当把float32（范围极大）转化为INT8（-128\~127，只有这256个格子）时，必须决定这256个格子代表多大的范围。
 
-如果没有校准数据集，工具不知道每一层的数据有多大，只能盲目的设置为-1000~1000，而实际范围是0~1，那么所有的数据就会被挤到一个格子中，精度彻底丢失。而有了校准数据集，预先跑一遍，统计每一层的最大值、最小值和分布直方图，这样量化系数就会很精准，精度损失最小
+如果没有校准数据集，工具不知道每一层的数据有多大，只能盲目的设置为-1000\~1000，而实际范围是0\~1，那么所有的数据就会被挤到一个格子中，精度彻底丢失。而有了校准数据集，预先跑一遍，统计每一层的最大值、最小值和分布直方图，这样量化系数就会很精准，精度损失最小
 
-校准数据集作用:one:统计范围，确定每一层激活值的动态范围。比如记录某一层大部分参数都落在0~1之间:two:计算参数，根据统计结果，计算每一层的量化银子和0点。这些参数会写入.rknn文件，NPU运行时靠这些参数把整数还原为浮点数
+校准数据集作用（1）计范围，确定每一层激活值的动态范围。比如记录某一层大部分参数都落在0\~1之间（2）算参数，根据统计结果，计算每一层的量化银子和0点。这些参数会写入.rknn文件，NPU运行时靠这些参数把整数还原为浮点数
 
 **如何注意校准数据集**
 
-1.图片数量不用多，训练集中有代表性的100~500张图片就足够。
+1.图片数量不用多，训练集中有代表性的100\~500张图片就足够。
 
 2.预处理必须一致，RKNN在读取校准数据集时会进行归一化，这里的设置必须与训练时完全一样。如果训练时是`input = (pixel - 127.5) / 128.0`，转换时
 
@@ -273,7 +273,7 @@ typedef struct _detect_result_group_t
 
 **置信度快速排序**：使用快排对置信度从高到低排列，方便nms。
 
-**非极大值抑制 **：对于同一个物体（比如一张脸），NPU 可能会预测出 5 个重叠的框。需要计算这些框之间的 **IoU（Intersection over Union）**，把重叠度高的框删除，只保留置信度最高的框，从而避免重复检测。人脸只保留置信度最高的一个
+**非极大值抑制** ：对于同一个物体（比如一张脸），NPU 可能会预测出 5 个重叠的框。需要计算这些框之间的 **IoU（Intersection over Union）**，把重叠度高的框删除，只保留置信度最高的框，从而避免重复检测。人脸只保留置信度最高的一个
 
 **坐标还原**：NPU 的输出坐标通常是在网络输入尺寸（如 `640x640`）下的，需要映射回原图尺寸（如 `1920x1080`）才能在原图上准确定位目标。这一步通常涉及缩放和偏移的计算，保证检测框与原图对齐。
 
@@ -289,9 +289,9 @@ typedef struct _detect_result_group_t
 
 直接操作`RK_MPI_MB_GetPtr`获取的内存指针，利用CPU进行像素修改
 
-优点:one:开发快，API简单直观，一行代码就能完成画框写字:two:功能丰富，支持各种字体、字号
+优点（1）发快，API简单直观，一行代码就能完成画框写字（2）能丰富，支持各种字体、字号
 
-缺点:one:CPU负载高，在720P（1280*720）图像上遍历像素并修改颜色，会导致CPU占用率飙升，抢占NPU和业务逻辑CPU的时间:two:格式兼容性差，RV1126的硬件（ISP、NPU）通常喜欢NV12格式，opencv的puttext只能处理BGR/RGB格式（但是RGA进行了格式转换，所以这个应该不是问题）:three:缓存一致性问题，CPU修改了内存，但硬件可能还在读取Cache中的旧数据，导致画上去的框闪烁或不显式，需要手动做Cache Flush
+缺点（1）PU负载高，在720P（1280*720）图像上遍历像素并修改颜色，会导致CPU占用率飙升，抢占NPU和业务逻辑CPU的时间（2）格式兼容性差，RV1126的硬件（ISP、NPU）通常喜欢NV12格式，opencv的puttext只能处理BGR/RGB格式（但是RGA进行了格式转换，所以这个应该不是问题）（3）存一致性问题，CPU修改了内存，但硬件可能还在读取Cache中的旧数据，导致画上去的框闪烁或不显式，需要手动做Cache Flush
 
 
 
