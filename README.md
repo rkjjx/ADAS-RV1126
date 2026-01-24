@@ -8,7 +8,7 @@
 
 **CPU**:四核ARM Cortex-A7 1.5GHZ and RISC-V MCU 200MHZ
 
-**14M ISP with 3帧HDR:**完成从RAW数据到可观看图像（YUV/RGB）的全套流水线处理。最大支持1400W像素分辨率的图像输入。
+**14M ISP with 3帧HDR**：完成从RAW数据到可观看图像（YUV/RGB）的全套流水线处理。最大支持1400W像素分辨率的图像输入。
 
 **NPU：**2.0Tops NPU，support INT8/INT16
 
