@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*- 
-
+#python3 pre_compile.py ./model_data/ultralytics_yolov5/yolov5s_self/best.rknn ./model_data/ultralytics_yolov5/yolov5s_self/best.pre.rknn
 import sys
 
 #if __name__ == '__main__':

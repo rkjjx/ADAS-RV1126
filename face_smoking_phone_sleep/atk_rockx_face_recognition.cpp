@@ -440,22 +440,6 @@ void *rkmedia_vi_face_thread(void *args)
   }
   printf("mobilefacenet model input height=%d, width=%d, channel=%d\n", mobilefacenet_height, mobilefacenet_width, mobilefacenet_channel);
 
-  rga_context rga_ctx;
-  drm_context drm_ctx;
-  memset(&rga_ctx, 0, sizeof(rga_context));
-  memset(&drm_ctx, 0, sizeof(drm_context));
-  // DRM alloc buffer
-  //int drm_fd = -1;
-  //int buf_fd = -1; // converted from buffer handle
-  //unsigned int handle;
-  //size_t actual_size = 0;
-  //void *drm_buf = NULL;
-  //drm_fd = drm_init(&drm_ctx);//返回drm设备文件描述符
-  //drm_buf = drm_buf_alloc(&drm_ctx, drm_fd, disp_width, disp_height, 3 * 8, &buf_fd, &handle, &actual_size);
-  void *yolov5s_input_buf = malloc(yolov5s_height * yolov5s_width * yolov5s_channel);
-  // init rga context
-  RGA_init(&rga_ctx);
-
   std::vector<float> out_scales;
   std::vector<uint8_t> out_zps;
   for (int i = 0; i < yolov5s_io_num.n_output; ++i)
@@ -463,7 +447,38 @@ void *rkmedia_vi_face_thread(void *args)
     out_scales.push_back(yolov5s_output_attrs[i].scale);
     out_zps.push_back(yolov5s_output_attrs[i].zp);
   }
-	//malloc分配pfpld输入数据
+  
+  MB_IMAGE_INFO_S yolov5s_ImageInfo = {(RK_U32)yolov5s_width, (RK_U32)yolov5s_height, (RK_U32)yolov5s_width, 
+									   (RK_U32)yolov5s_height, IMAGE_TYPE_BGR888};
+  MEDIA_BUFFER yolov5s_npu_mb = RK_MPI_MB_CreateImageBuffer(&yolov5s_ImageInfo, RK_TRUE, 0);
+
+  //构建yolov5s input rknn_tensor_mem
+  rknn_tensor_mem yolov5s_input_mem[yolov5s_io_num.n_input];
+  memset(yolov5s_input_mem, 0, sizeof(yolov5s_input_mem));
+  yolov5s_input_mem[0].fd    = RK_MPI_MB_GetFD(yolov5s_npu_mb); 
+  yolov5s_input_mem[0].size  = yolov5s_width * yolov5s_height * yolov5s_channel;
+
+  //yolov5s只map一次
+  ret = rknn_inputs_map(yolov5s_ctx, yolov5s_io_num.n_input, yolov5s_input_mem);
+  if (ret != RKNN_SUCC) {
+    printf("yolov5 rknn_inputs_map failed: %d\n", ret);
+    return NULL;
+  }
+  //构建yolov5s output rknn_tensor_mem
+  rknn_tensor_mem yolov5s_output_mem[yolov5s_io_num.n_output];
+  memset(yolov5s_output_mem, 0, sizeof(yolov5s_output_mem));
+  for(int i=0;i<yolov5s_io_num.n_output;i++){
+	  yolov5s_output_mem[i].logical_addr=malloc(yolov5s_output_attrs[i].size);
+	  yolov5s_output_mem[i].size=yolov5s_output_attrs[i].size;
+  }
+
+  //yolov5s只map一次
+  ret = rknn_outputs_map(yolov5s_ctx, yolov5s_io_num.n_output, yolov5s_output_mem);
+  if (ret != RKNN_SUCC) {
+    printf("yolov5 rknn_outputs_map failed: %d\n", ret);
+    return NULL;
+  }
+
   void *pfpld_input_buf = malloc(pfpld_height * pfpld_width * pfpld_channel);
   while (!atk_face_recognition_quit) 
   {
@@ -477,23 +492,19 @@ void *rkmedia_vi_face_thread(void *args)
       printf("ERROR: RK_MPI_SYS_GetMediaBuffer get null buffer!\n");
       break;
     }
-    //memcpy(drm_buf, (uint8_t *)RK_MPI_MB_GetPtr(src_mb) , disp_width * disp_height * 3);
-    img_resize_slow(&rga_ctx, (uint8_t *)RK_MPI_MB_GetPtr(src_mb), disp_width, disp_height, yolov5s_input_buf, yolov5s_width, yolov5s_height);
-
-    // Set Input Data
-    rknn_input yolov5s_inputs[1];
-    memset(yolov5s_inputs, 0, sizeof(yolov5s_inputs));
-    yolov5s_inputs[0].index = 0;
-    yolov5s_inputs[0].type = RKNN_TENSOR_UINT8;
-    yolov5s_inputs[0].size = yolov5s_height*yolov5s_width*yolov5s_channel;
-    yolov5s_inputs[0].fmt = RKNN_TENSOR_NHWC;
-    yolov5s_inputs[0].buf = yolov5s_input_buf;
-    ret = rknn_inputs_set(yolov5s_ctx, yolov5s_io_num.n_input, yolov5s_inputs);
-    if (ret < 0)
+    rga_buffer_t src, yolov5s_dst;
+    yolov5s_dst = wrapbuffer_fd(yolov5s_input_mem[0].fd, yolov5s_width, yolov5s_height,RK_FORMAT_BGR_888);
+    src = wrapbuffer_fd(RK_MPI_MB_GetFD(src_mb), disp_width, disp_height,RK_FORMAT_BGR_888);
+    
+    IM_STATUS RESIZE_STATUS = imresize(src, yolov5s_dst);
+    if (RESIZE_STATUS != IM_STATUS_SUCCESS)
     {
-      printf("ERROR: yolov5s rknn_inputs_set fail! ret=%d\n", ret);
-      continue;
+      printf("ERROR: imresize failed: %s\n", imStrError(RESIZE_STATUS));
     }
+
+	//*************************************************
+	
+    rknn_inputs_sync(yolov5s_ctx, yolov5s_io_num.n_input, yolov5s_input_mem);
     // yolov5s Run
     ret = rknn_run(yolov5s_ctx, nullptr);
     if (ret < 0)
@@ -501,21 +512,9 @@ void *rkmedia_vi_face_thread(void *args)
       printf("ERROR: yolov5s rknn_run fail! ret=%d\n", ret);
       continue;
     }
-
     // Get Output
-    rknn_output yolov5s_outputs[yolov5s_io_num.n_output];
-    memset(yolov5s_outputs, 0, sizeof(yolov5s_outputs));
-    for (int i = 0; i < yolov5s_io_num.n_output; i++)
-    {
-      yolov5s_outputs[i].want_float = 0;
-    }
-    ret = rknn_outputs_get(yolov5s_ctx, yolov5s_io_num.n_output, yolov5s_outputs, NULL);
-    if (ret < 0)
-    {
-      printf("ERROR: rknn_outputs_get fail! ret=%d\n", ret);
-      continue;
-    }
-
+    rknn_outputs_sync(yolov5s_ctx, yolov5s_io_num.n_output, yolov5s_output_mem);
+	
     const float vis_threshold = 0.2;
     const float nms_threshold = 0.3;
     const float conf_threshold = 0.4;
@@ -523,7 +522,9 @@ void *rkmedia_vi_face_thread(void *args)
     float scale_h = (float)yolov5s_height / disp_height;
     detect_result_group_t detect_result_group;
     memset(&detect_result_group, 0, sizeof(detect_result_group));
-    post_process((uint8_t *)yolov5s_outputs[0].buf, (uint8_t *)yolov5s_outputs[1].buf, (uint8_t *)yolov5s_outputs[2].buf, yolov5s_height, yolov5s_width,
+    post_process((uint8_t *)yolov5s_output_mem[0].logical_addr, 
+		         (uint8_t *)yolov5s_output_mem[1].logical_addr, 
+		         (uint8_t *)yolov5s_output_mem[2].logical_addr, yolov5s_height, yolov5s_width,
                  conf_threshold, nms_threshold, vis_threshold, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
     filter_largest_face_only(&detect_result_group);
     for (int i = 0; i < detect_result_group.count; i++)
@@ -533,7 +534,6 @@ void *rkmedia_vi_face_thread(void *args)
       int top = det_result->box.top;
       int right = det_result->box.right;
       int bottom = det_result->box.bottom;
-//***********************************************************************************************************************************************************
       if(strcmp(det_result->name, "face") == 0)
       {
         
@@ -544,7 +544,6 @@ void *rkmedia_vi_face_thread(void *args)
 		    face_size=video_buf_rect.width;
 		    face_xstart=video_buf_rect.x;
 		    face_ystart=video_buf_rect.y;
-		
 		    //设置pfpld输入数据区域
 		    im_rect pfpld_input_buf_rect = {0, 0, pfpld_width, pfpld_height};
 
@@ -565,7 +564,6 @@ void *rkmedia_vi_face_thread(void *args)
           printf("ERROR: rknn_inputs_set fail! ret=%d\n", ret);
           continue;
         }
-        
         // Run
         ret = rknn_run(pfpld_ctx, nullptr);
         if (ret < 0)
@@ -602,8 +600,7 @@ void *rkmedia_vi_face_thread(void *args)
         {
           printf("ERROR: mobilefacenet rknn_inputs_set fail! ret=%d\n", ret);
           continue;
-        }
-        
+        } 
         ret = rknn_run(mobilefacenet_ctx, nullptr);
         if (ret < 0)
         {
@@ -654,7 +651,6 @@ void *rkmedia_vi_face_thread(void *args)
         rknn_outputs_release(mobilefacenet_ctx, mobilefacenet_io_num.n_output, mobilefacenet_outputs);
         
       }//end "if(strcmp(det_result->name, "face") == 0)"
-//***********************************************************************************************************************************************************
       using namespace cv;
       Mat orig_img = Mat(disp_height, disp_width, CV_8UC3, RK_MPI_MB_GetPtr(src_mb));//黑白灰图案
       // 采用opencv来绘制矩形框,颜色格式是B、G、R
@@ -662,7 +658,6 @@ void *rkmedia_vi_face_thread(void *args)
       putText(orig_img, detect_result_group.results[i].name, Point(left, top-16), FONT_HERSHEY_TRIPLEX, 1, Scalar(0,0,255),2,8,0); 
     }//end "for (int i = 0; i < detect_result_group.count; i++)"
 
-    rknn_outputs_release(yolov5s_ctx, yolov5s_io_num.n_output, yolov5s_outputs);
 	  clock_gettime(CLOCK_MONOTONIC, &end);
     fps = 1/((end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec)/1e9);
     using namespace cv;
@@ -679,12 +674,13 @@ void *rkmedia_vi_face_thread(void *args)
     RK_MPI_SYS_SendMediaBuffer(RK_ID_RGA, 0, src_mb);
     RK_MPI_MB_ReleaseBuffer(src_mb);
   }//end "while (!atk_face_recognition_quit)"
-
-  free(yolov5s_input_buf);
+  rknn_inputs_unmap(yolov5s_ctx, yolov5s_io_num.n_input,yolov5s_input_mem);
+  RK_MPI_MB_ReleaseBuffer(yolov5s_npu_mb);
   free(pfpld_input_buf);
-  //drm_buf_destroy(&drm_ctx, drm_fd, buf_fd, handle, drm_buf, actual_size);
-  drm_deinit(&drm_ctx, drm_fd);
-  RGA_deinit(&rga_ctx);
+  for(int i=0;i<yolov5s_io_num.n_output;i++){
+	  free(yolov5s_output_mem[i].logical_addr);
+  }
+
   if(yolov5s) 
    {
      free(yolov5s);

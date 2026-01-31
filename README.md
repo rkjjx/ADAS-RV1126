@@ -79,21 +79,15 @@ RKNN-Toolkit 版本不能高于开发板上的 NPU 驱动（librknn_runtime）�
 
 [模型剪枝的概念分类方法流程与核心算法解析-开发者社区-阿里云](https://developer.aliyun.com/article/1644450)
 
-
+<img src="./assets/7ba7b26a8477ba8d7449271888b7b9d6.png" alt="7ba7b26a8477ba8d7449271888b7b9d6" style="zoom:67%;" />
 
 ### 3.3模型转换与量化
-
-在特定的条件下，可以把输入数据拷贝次数减少到零，即零拷贝。比如，当RKNN 模型是非对称量化，量化数据类型是uint8，3 通道的均值是相同的整数同时缩放因子相同的情况下，归一化和量化可以省略。
 
 #### 3.3.1模型转化
 
 RV1126芯片搭载的是瑞芯微自研的NPU，算力约为2.0 TOPS，其核心优势在于高能效比。它并不直接运行PyTorch或TensorFlow模型，而是运行专有的.rknn格式模型。这个转换过程（Model Conversion）是一个复杂的编译优化过程，而非简单的格式转存。
 
 首先是**图优化（Graph Optimization）与算子融合（Operator Fusion）**。在深度学习框架中，一个卷积层（Conv2d）后面往往紧跟一个批归一化层（BatchNorm）和一个激活函数层（如SiLU或ReLU）。在推理阶段，这三个操作的数学公式可以被合并为一个单独的线性变换公式。rknn-toolkit在解析ONNX模型时，会自动识别这种模式并进行融合。
-
-
-
-
 
 #### 3.3.2量化
 
@@ -154,7 +148,7 @@ std_values=[255, 255, 255]
 
 <img src="./assets/7a92c3146f0cf15060b49bd7d2a9af0c.png" alt="4538c439d170e41c1e126b5e2fe227b" style="zoom: 25%;" />
 
-<img src="./assets/pipeline.png" alt="pipeline" style="zoom:50%;" />
+<img src="./assets/pipeline.png" alt="pipeline"  />
 
 ### 4.2RGA
 
@@ -187,7 +181,7 @@ if (ret) {
 }
 ```
 
-**1.新建RGA[0:1]通道将图像格式从NV12转为BGR888并旋转270度**
+**新建RGA[0:1]通道将图像格式从NV12转为BGR888并旋转270度**
 
 为了方便RKNPU处理图像以及使用OpenBCI添加AI分析结果
 
@@ -222,37 +216,21 @@ typedef struct {
 } rga_buffer_t;
 ```
 
-**使用实例**
 
-```c
-drm_buf = drm_buf_alloc(&drm_ctx, drm_fd, video_width, video_height, channel * 8, &buf_fd, &handle, &actual_size);
-```
-
-`&buf_fd`：共享给别的进程/模块的通行证（DMA_BUF fd）
-
-`handle`：仅供DRM/RGA内部识别这块buffer的ID
-
-将一块内存空间类比为房子，那么fd类似于房产证编号，外人（其他进程）只认房产证编号（FD）。物业（DRM/RGA驱动）内部管理用的房号（handle）
-
-**文件描述符与rga_buffer_t中的int fd;是一种东西吗**
-
-本质上是一类东西，都是Linux中的文件描述符。但rga_buffer_t.fd特指一个DMA-BUF文件描述符，用来共享图像缓冲区。
-
-```c
-int fd = open("test.txt", O_RDONLY);
-```
-
-这个fd指向磁盘上的一个普通文件，或socket、设备文件等
-
-而`drm_buf_alloc`中的buf_fd指向的是一块显存，可以被ISP（摄像头）、RGA（图像处理）、NPU（RKNN）、DRM（显示）共同访问的一块物理内存。
-
-```c
-src.fd=buf_fd
-```
-
-当这样写时，是在告诉RGA这块图像buffer不要自己malloc()，直接用这个DMA-BUF fd指向的共享显存。这也是零拷贝实现的基础
 
 ### 4.3Yolov5s后处理
+
+#### 4.3.1零拷贝
+
+在推理RKNN模型时，原始数据要经过输入处理、NPU运行模型、输出处理三大流程。在典型的图片推理场景中，假设输入data是3通道且为NHWC，运行时数据处理流程如下图所示
+
+<img src="./assets/ab9e51178eb3eb5c5ad1d96d1c01ceea.png" alt="ab9e51178eb3eb5c5ad1d96d1c01ceea" style="zoom: 67%;" />
+
+在特定情况下，可以把输入数据拷贝次数减为0，即0拷贝。如RKNN模型是非对称量化，且量化类型为uint8，三通道的均值是相同的整数同时缩放因子相同的情况下，归一化和量化可以省略，数学证明此处省略。
+
+<img src="./assets/561d98d4091bb5382d4a5a42d4c8edcf.png" alt="561d98d4091bb5382d4a5a42d4c8edcf" style="zoom: 67%;" />
+
+`rknn_inputs_set`（当pass_through=1 时）和`rknn_inputs_map` 不包含任何输入处理流程，`rknn_outputs_get`（当want_float=0 时）和rknn_outputs_map 不包含任何输出处理流程。此时，虽然两组API 都不包含对应的处理流程，不过，使用set/get 系列接口会比map 系列接口多出数据拷贝过程。
 
 ```c++
 //三个容器分别存放检测框坐标、置信度、类别

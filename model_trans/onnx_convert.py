@@ -10,13 +10,13 @@ from rknn.api import RKNN
 import cv2
 
 
-#ONNX_MODEL = '/home/alientek/ADAS/model_trans/model_data_new/ultralytics_yolov5/yolov5s_v4.0/best.onnx'  # onnx 模型的路径
-#RKNN_MODEL = '/home/alientek/ADAS/model_trans/model_data_new/ultralytics_yolov5/yolov5s_v4.0/best.rknn'  # 转换后的 RKNN 模型保存路径
-#DATASET = './model_data/faceland/dataset.txt'  # 数据集文件路径
+ONNX_MODEL = '/home/alientek/ADAS/model_trans/model_data/ultralytics_yolov5/yolov5s_v4.0_zerocopy/best.onnx'  # onnx 模型的路径
+RKNN_MODEL = '/home/alientek/ADAS/model_trans/model_data/ultralytics_yolov5/yolov5s_v4.0_zerocopy/best.rknn'  # 转换后的 RKNN 模型保存路径
+DATASET = './model_data/ultralytics_yolov5/yolov5s_v4.0_zerocopy/dataset.txt'  # 数据集文件路径
 
-ONNX_MODEL = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/mobilefacenet.onnx'  # onnx 模型的路径
-RKNN_MODEL = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/mobilefacenet.rknn'  # 转换后的 RKNN 模型保存路径
-DATASET = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/dataset.txt'  # 数据集文件路径
+#ONNX_MODEL = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/mobilefacenet.onnx'  # onnx 模型的路径
+#RKNN_MODEL = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/mobilefacenet.rknn'  # 转换后的 RKNN 模型保存路径
+#DATASET = '/home/alientek/ADAS/model_trans/model_data/mobilefacenet/dataset.txt'  # 数据集文件路径
 
 
 QUANTIZE_ON = True  # 是否进行量化
@@ -42,12 +42,13 @@ if __name__ == '__main__':
                 optimization_level=3,  # 优化级别
                 target_platform='rv1126',  # 指定目标平台为rv1126
                 output_optimize=1,  # 输出优化为真
-                quantize_input_node=QUANTIZE_ON)  # 对时输入节点进行量化
+                quantize_input_node=QUANTIZE_ON, # 对时输入节点进行量化
+                force_builtin_perm=True)#NCHW->NHWC
     print('done')
 
     # 加载 ONNX 模型
     print('--> Loading model')
-    ret = rknn.load_onnx(model=ONNX_MODEL,outputs=['output'])#
+    ret = rknn.load_onnx(model=ONNX_MODEL,outputs=['output0','output1','output2'])#
     if ret != 0:
         print('Load yolov5 failed!')
         exit(ret)

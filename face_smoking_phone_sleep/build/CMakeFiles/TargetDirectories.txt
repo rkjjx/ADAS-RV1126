@@ -1,0 +1,4 @@
+/home/alientek/ADAS/face_smoking_phone_sleep/build/CMakeFiles/rebuild_cache.dir
+/home/alientek/ADAS/face_smoking_phone_sleep/build/CMakeFiles/edit_cache.dir
+/home/alientek/ADAS/face_smoking_phone_sleep/build/CMakeFiles/import_face_library.dir
+/home/alientek/ADAS/face_smoking_phone_sleep/build/CMakeFiles/atk_face_recognition.dir
