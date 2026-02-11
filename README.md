@@ -63,8 +63,6 @@ MIPI CSI接口 x2
 - **Concat**
 - **Detect**：Conv + Sigmoid + Reshape + MatMul
 
-<img src="./assets/precision_recall_curve.png" alt="precision_recall_curve" style="zoom: 33%;" />
-
 人脸98关键点检测与人脸识别都是CNN，backbone都类似，只是检测头和损失函数的设计有区别，回归任务还是分类任务罢了
 
 ## 3.模型剪枝、格式转换、量化与预编译
@@ -77,9 +75,38 @@ RKNN-Toolkit 版本不能高于开发板上的 NPU 驱动（librknn_runtime）�
 
 ### 3.2剪枝
 
-[模型剪枝的概念分类方法流程与核心算法解析-开发者社区-阿里云](https://developer.aliyun.com/article/1644450)
+#### 3.2.1正常训练exp1
+
+![绘图1](./assets/绘图1.png)
+
+#### 3.2.2稀疏化训练
+
+|                           | BN gumma Threshold<0.01 | map0.5 |
+| ------------------------- | ----------------------- | ------ |
+| sr=0            epoch=200 | 0%                      | 0.875  |
+| sr=0.001    epoch=150     | 12.86%                  | 0.865  |
+| sr=0.001    epoch=300     | 66.07%                  | 0.872  |
+| sr=0.0013  epoch=300      | 71.88%                  | 0.859  |
+| sr=0.0015  epoch=300      | 75.35%                  | 0.854  |
+| sr=0.0018  epoch=300      | 79.16%                  | 0.837  |
+| sr=0.002    epoch=200     | 79.95%                  | 0.817  |
+| sr=0.003    epoch=200     | 87%                     | 0.734  |
+| sr=0.005    epoch=200     | 93.13%                  | 0.567  |
+
+综合考虑，选择sr=0.001，epoch=300
 
 <img src="./assets/7ba7b26a8477ba8d7449271888b7b9d6.png" alt="7ba7b26a8477ba8d7449271888b7b9d6" style="zoom:67%;" />
+
+#### ![绘图3](./assets/绘图3.png)3.2.3结构化剪枝与微调
+
+按照BN层权重大小，锁定检测头，对banckbone和neck通道剪枝50%比例
+
+剪枝前：MACs=8.1984 G, Params=7.0689 M
+剪枝后：MACs=3.8783 G, Params=1.9089 M
+
+模型剪枝后重新训练，掉电2.7个点，可接受
+
+<img src="./assets/precision_recall_curve.png" alt="precision_recall_curve" style="zoom: 33%;" />
 
 ### 3.3模型转换与量化
 
@@ -140,7 +167,7 @@ std_values=[255, 255, 255]
 
 ### 3.4预编译
 
-
+内容为网络结构+原始权重的rknn模型编译为rv1126平台上专用的NPU机器操作码，减少了模型初始化时间。
 
 ## 4.模型部署
 
@@ -216,9 +243,7 @@ typedef struct {
 } rga_buffer_t;
 ```
 
-
-
-### 4.3Yolov5s后处理
+### 4.3Yolov5s
 
 #### 4.3.1零拷贝
 
@@ -231,6 +256,8 @@ typedef struct {
 <img src="./assets/561d98d4091bb5382d4a5a42d4c8edcf.png" alt="561d98d4091bb5382d4a5a42d4c8edcf" style="zoom: 67%;" />
 
 `rknn_inputs_set`（当pass_through=1 时）和`rknn_inputs_map` 不包含任何输入处理流程，`rknn_outputs_get`（当want_float=0 时）和rknn_outputs_map 不包含任何输出处理流程。此时，虽然两组API 都不包含对应的处理流程，不过，使用set/get 系列接口会比map 系列接口多出数据拷贝过程。
+
+#### 4.3.2后处理
 
 ```c++
 //三个容器分别存放检测框坐标、置信度、类别
@@ -259,8 +286,6 @@ typedef struct _detect_result_group_t
 
 **结论**：这一步是纯 CPU 计算。如果C++ 后处理写得烂，经常会出现 **“NPU 算得飞快（10ms），但 CPU 后处理卡半天（30ms）”** 的情况。
 
-
-
 ### 4.4如何画框写字
 
 #### 4.4.1OpenCV
@@ -271,11 +296,9 @@ typedef struct _detect_result_group_t
 
 缺点（1）PU负载高，在720P（1280*720）图像上遍历像素并修改颜色，会导致CPU占用率飙升，抢占NPU和业务逻辑CPU的时间（2）格式兼容性差，RV1126的硬件（ISP、NPU）通常喜欢NV12格式，opencv的puttext只能处理BGR/RGB格式（但是RGA进行了格式转换，所以这个应该不是问题）（3）存一致性问题，CPU修改了内存，但硬件可能还在读取Cache中的旧数据，导致画上去的框闪烁或不显式，需要手动做Cache Flush
 
-
-
 ## 5.性能优化
 
-### 5.1看指标
+### 5.1硬件
 
 #### 5.1.1系统中断
 
@@ -372,7 +395,34 @@ yolov5s模型量化前28MB，量化为uint8后7.2MB，预编译后5.9MB。
 
 ## 6.嵌入式GUI
 
+三种图形显示技术LinuxFB、EGLFS和Wayland
 
+| 特性       | LinuxFB                                          | EGLFS                                                   | Wayland                                                  |
+| ---------- | ------------------------------------------------ | ------------------------------------------------------- | -------------------------------------------------------- |
+| 工作原理   | 直接读取内核帧缓冲设备/dev/fb0，无中间图形服务器 | 基于OpenGL ES接口，通过GPU硬件加速渲染，通常结合DRM/KMS | 客户端直接与合成器通信，合成器统一管理窗口渲染和输入事件 |
+| 架构层级   | 应用->帧缓冲驱动->显示器                         | 应用->EGLFS插件->DRM/KMS->GPU                           | 应用->Wayland协议->合成器->DRM/GBM->GPU                  |
+| 渲染方式   | CPU软件渲染                                      | GPU硬件加速（OpenGL ES/Vulkan）                         | GPU硬件加速（OpenGL ES/Vulkan）                          |
+| 多窗口支持 | 仅单窗口                                         | 仅单窗口，全屏独占                                      | 原生多窗口，依赖合成器实现                               |
+
+开发适配性，以QT为例
+
+| 框架       | LinuxFB                          | EGLFS                             | Wayland                 |
+| ---------- | -------------------------------- | --------------------------------- | ----------------------- |
+| QT插件     | 默认支持                         | 需要GPU驱动                       | 需要额外编译模块        |
+| OpenGL支持 | 不支持                           | 支持                              | 支持                    |
+| 代码限制   | 只能使用QWidget，禁QOpenGLWidget | 支持QOpenGLWidget，但需要全屏运行 | 需要处理Wayland协议扩展 |
+
+OpenGL是用来渲染2D、3D矢量图形的开放的、跨平台的API
+
+DRM是linux内核中负责管理显卡和显示控制器的子系统。DRM的出现是为了解决linux图形系统中存在的“无政府状态”。在DRM出现之前，linux使用的的framebuffer和用户空间模式设置，随着显卡功能越来越强大，旧的这套东西无法满足需求。DRM的出现解决了4个痛点（1）从抢占式到协调式。旧时代显卡的控制权在用户程序手中，应用程序间若同时使用显卡易冲突。DRM后将显卡硬件的控制权收回到linux内核中，所有的应用程序想使用显卡必须先向DRM申请，DRM负责协调（2）从CPU搬运到GPU直通车。旧时代CPU算出每个像素，memcpy到显存，负载高。DRM后引入了GEM实现了0拷贝，摄像头将数据写到内存地址A，DRM将内存地址A告诉显卡，显卡直接读，实现0拷贝（3）从应用设置到内核设置。旧时代显示设置是在用户空间做的，容易出现闪烁，DRM后完全在内核中做，没有闪烁（4）从软件合成到硬件叠加。旧时代需要COU先把视频帧读出来再修改。DRM时代抽象出了plane图层概念，视频放在overlay plane，字幕/UI放在primary plane。输出时DRM告诉显示控制器VOP将两层叠在一起发送给显示器
+
+DRM框架横跨用户空间、内核和硬件三层，各层组件分工明确
+
+![766f813ca4f4988a7a5402939aae585b](./assets/766f813ca4f4988a7a5402939aae585b.png)
+
+用户空间：应用程序通过`libdrm`这个标准库与内核交互。`libdrm`封装了底层了`ioctl`调用，提供了更友好的函数接口
+
+内核空间：`drm core`是核心，负责处理用户空间的请求，并调用具体的驱动实现。下辖几个关键的子系统（1）GEM：负责显存分配与管理（2）KMS：负责显示模式设置与控制（3）DRM BUF：负责跨设备的数据共享与同步（4）DRM驱动：由硬件厂商提供，直接与硬件通信
 
 
 

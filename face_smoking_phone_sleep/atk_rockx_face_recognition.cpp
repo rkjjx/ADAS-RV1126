@@ -120,7 +120,7 @@ int atk_recognition_init()
   /*
   VO_CHN_ATTR_S stVoAttr = {0};
   stVoAttr.pcDevNode = "/dev/dri/card0";
-  stVoAttr.emPlaneType = VO_PLANE_PRIMARY;
+  stVoAttr.emPlaneType = VO_PLANE_OVERLAY;
   stVoAttr.enImgType = IMAGE_TYPE_BGR888;
   stVoAttr.u16Zpos = 0;
   stVoAttr.stImgRect.s32X = 0;
