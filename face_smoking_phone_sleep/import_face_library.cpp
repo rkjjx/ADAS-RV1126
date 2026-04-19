@@ -3,17 +3,16 @@
 #include "stb_image_resize.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-int main(int argc, char *argv[]) 
+int main(int argc, char *argv[])
 {
-  const char *name = argv[1];
-  const char *image_path = argv[2]; 
-  
- 
-  if (argc != 3) 
+  if (argc != 3)
   {
     printf("Usage: ./import_face_library  face_name face_image_path\n");
     return -1;
   }
+
+  const char *name = argv[1];
+  const char *image_path = argv[2];
 
   open_db();
 
@@ -23,9 +22,8 @@ int main(int argc, char *argv[])
     printf("Failed to load image\n");
     return 1;
   }
-  run_face_recognize(name, img);
 
-  return 0;
+  return run_face_recognize(name, img);
 }
 static void printRKNNTensor(rknn_tensor_attr *attr)
 {
@@ -48,24 +46,28 @@ static unsigned char *load_model(const char *filename, int *model_size)
   fseek(fp, 0, SEEK_END);
   unsigned int model_len = ftell(fp);
   unsigned char *model = (unsigned char *)malloc(model_len);
+  if (model == NULL)
+  {
+    printf("malloc %s fail!\n", filename);
+    fclose(fp);
+    return NULL;
+  }
   fseek(fp, 0, SEEK_SET);
 
   if (model_len != fread(model, 1, model_len, fp))
   {
     printf("fread %s fail!\n", filename);
     free(model);
+    fclose(fp);
     return NULL;
   }
   *model_size = model_len;
 
-  if (fp)
-  {
-    fclose(fp);
-  }
+  fclose(fp);
   return model;
 }
 
-int run_face_recognize(const char *name, unsigned char *in_image) 
+int run_face_recognize(const char *name, unsigned char *in_image)
 {
   rknn_context ctx;
   int ret;
@@ -73,12 +75,20 @@ int run_face_recognize(const char *name, unsigned char *in_image)
   // Load RKNN Model
   int model_len = 0;
   static char *model_path = "/demo/bin/mobilefacenet.pre.rknn";
-  printf("Loading model ...\n");            
+  printf("Loading model ...\n");
   model = load_model(model_path, &model_len);
+  if (model == NULL || model_len <= 0)
+  {
+    printf("load model %s fail!\n", model_path);
+    stbi_image_free(in_image);
+    return -1;
+  }
   ret = rknn_init(&ctx, model, model_len, 0);
   if (ret < 0)
   {
     printf("rknn_init fail! ret=%d\n", ret);
+    stbi_image_free(in_image);
+    free(model);
     return -1;
   }
   // Get Model Input Output Info
@@ -87,6 +97,9 @@ int run_face_recognize(const char *name, unsigned char *in_image)
   if (ret != RKNN_SUCC)
   {
     printf("rknn_query fail! ret=%d\n", ret);
+    stbi_image_free(in_image);
+    free(model);
+    rknn_destroy(ctx);
     return -1;
   }
   printf("model input num: %d, output num: %d\n", io_num.n_input,io_num.n_output);
@@ -102,6 +115,9 @@ int run_face_recognize(const char *name, unsigned char *in_image)
     if (ret != RKNN_SUCC)
     {
       printf("rknn_query fail! ret=%d\n", ret);
+      stbi_image_free(in_image);
+      free(model);
+      rknn_destroy(ctx);
       return -1;
     }
     printRKNNTensor(&(input_attrs[i]));
@@ -118,6 +134,9 @@ int run_face_recognize(const char *name, unsigned char *in_image)
     if (ret != RKNN_SUCC)
     {
       printf("rknn_query fail! ret=%d\n", ret);
+      stbi_image_free(in_image);
+      free(model);
+      rknn_destroy(ctx);
       return -1;
     }
     printRKNNTensor(&(output_attrs[i]));
@@ -140,7 +159,7 @@ int run_face_recognize(const char *name, unsigned char *in_image)
       height = input_attrs[0].dims[2];
   }
 
-  
+
   rknn_input inputs[1];
   memset(inputs, 0, sizeof(inputs));
   inputs[0].index = 0;
@@ -152,15 +171,21 @@ int run_face_recognize(const char *name, unsigned char *in_image)
   if (ret < 0)
   {
     printf("ERROR: rknn_inputs_set fail! ret=%d\n", ret);
+    stbi_image_free(in_image);
+    free(model);
+    rknn_destroy(ctx);
     return -1;
   }
-  free(in_image);
+  stbi_image_free(in_image);
+  in_image = NULL;
   // Run
   printf("rknn_run\n");
   ret = rknn_run(ctx, nullptr);
   if (ret < 0)
   {
     printf("ERROR: rknn_run fail! ret=%d\n", ret);
+    free(model);
+    rknn_destroy(ctx);
     return -1;
   }
 
@@ -176,6 +201,8 @@ int run_face_recognize(const char *name, unsigned char *in_image)
   if (ret < 0)
   {
     printf("ERROR: rknn_outputs_get fail! ret=%d\n", ret);
+    free(model);
+    rknn_destroy(ctx);
     return -1;
   }
   printf("outputs[0].size = %d\n", outputs[0].size);
@@ -190,12 +217,12 @@ int run_face_recognize(const char *name, unsigned char *in_image)
   printf("FEATURE_SIZE=%d\n",FEATURE_SIZE);
   insert_face_data_to_database(name, FEATURE_SIZE, (float*)outputs[0].buf);
   rknn_outputs_release(ctx, 1, outputs);
-  if (model) 
+  if (model)
   {
-    delete model;
+    free(model);
     model = NULL;
   }
-  rknn_destroy (ctx); 
+  rknn_destroy (ctx);
   /*
   float feature_t[512];
   int featureSize_t;

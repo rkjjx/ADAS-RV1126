@@ -42,19 +42,34 @@ float cosine_similarity(const float* vec1, const float* vec2, int size) {
 }
 
 FaceRecognitionFrame *GetFace() {
-    FaceRecognitionFrame *frame;
-
-    frame = (FaceRecognitionFrame*)malloc(sizeof (FaceRecognitionFrame));
-
     MEDIA_BUFFER src_mb = NULL;
     src_mb = RK_MPI_SYS_GetMediaBuffer(RK_ID_RGA, 1, -1);
     if (!src_mb) {
         printf("RK_MPI_SYS_GetMediaBuffer get null buffer!\n");
         return NULL;
     }
+
+    FaceRecognitionFrame *frame = (FaceRecognitionFrame*)malloc(sizeof(FaceRecognitionFrame));
+    if (!frame) {
+        RK_MPI_MB_ReleaseBuffer(src_mb);
+        return NULL;
+    }
+
     unsigned char *face_buf = (unsigned char *)malloc(112 * 112 * 3);
-    rgb24_resize((unsigned char *)RK_MPI_MB_GetPtr(src_mb),{face_xstart, face_ystart, face_size, face_size},disp_width,disp_height,
+    if (!face_buf) {
+        RK_MPI_MB_ReleaseBuffer(src_mb);
+        free(frame);
+        return NULL;
+    }
+
+    int ret = rgb24_resize((unsigned char *)RK_MPI_MB_GetPtr(src_mb),{face_xstart, face_ystart, face_size, face_size},disp_width,disp_height,
                     (unsigned char *)face_buf,{0, 0, 112, 112},112,112);
+    RK_MPI_MB_ReleaseBuffer(src_mb);
+    if (ret != 0) {
+        free(face_buf);
+        free(frame);
+        return NULL;
+    }
 
     frame->file = face_buf;
     frame->size = 112 * 112 * 3;
@@ -80,7 +95,7 @@ void filter_largest_face_only(detect_result_group_t *group)
             // 计算面积：(right - left) * (bottom - top)
             int width = group->results[i].box.right - group->results[i].box.left;
             int height = group->results[i].box.bottom - group->results[i].box.top;
-            
+
             // 防止负数
             if (width < 0) width = 0;
             if (height < 0) height = 0;
@@ -135,30 +150,30 @@ int get_aligned_crop_rect(BOX_RECT obj_box, int img_w, int img_h, int align, im_
     // 1. 计算原始宽高
     int w = obj_box.right - obj_box.left;
     int h = obj_box.bottom - obj_box.top;
-    
+
     // 2. 确定基准边长 (取长边并扩充1.1倍)
     int size = (int)(MAX(w, h) * 1.1f);
-        
+
     // 4. 安全检查：如果扩充后比原图还大，只能被迫缩小 (向下取整)
     if (size > MIN(img_w, img_h)) {
         size = (MIN(img_w, img_h) / align) * align;
     }
-    
+
     if (size == 0) return 0; // 失败
 
     // 5. 计算中心点
     int cx = (obj_box.left + obj_box.right) / 2;
     int cy = (obj_box.top + obj_box.bottom) / 2;
-    
+
     // 6. 算出左上角 (暂不考虑边界)
     int x = cx - size / 2;
     int y = cy - size / 2;
-    
+
     // 7. 平移逻辑 (Shift)：把框推回图像内
     // 先限制右下角，防止溢出
     if (x + size > img_w) x = img_w - size;
     if (y + size > img_h) y = img_h - size;
-    
+
     // 再限制左上角，防止负数 (优先级更高，因为size已经保证小于img了，这里只是为了兜底)
     x = MAX(x, 0); // 或者你的业务要求 x > 2
     y = MAX(y, 0);
@@ -168,7 +183,7 @@ int get_aligned_crop_rect(BOX_RECT obj_box, int img_w, int img_h, int align, im_
     out_rect->y = y;
     out_rect->width = size;
     out_rect->height = size;
-    
+
     return 1;
 }
 
@@ -190,10 +205,6 @@ int rgb24_resize(unsigned char *input_rgb,im_rect src_rect,int input_width,int i
 }
 
 FaceRecognitionFrame *GetFaceRecognitionMediaBuffer() {
-    FaceRecognitionFrame *frame;
-
-    frame = (FaceRecognitionFrame*)malloc(sizeof (FaceRecognitionFrame));
-
     MEDIA_BUFFER src_mb = NULL;
     src_mb = RK_MPI_SYS_GetMediaBuffer(RK_ID_RGA, 0, -1);
     if (!src_mb) {
@@ -201,9 +212,21 @@ FaceRecognitionFrame *GetFaceRecognitionMediaBuffer() {
         return NULL;
     }
 
-    frame->file = RK_MPI_MB_GetPtr(src_mb);
-    frame->size = RK_MPI_MB_GetSize(src_mb);
+    FaceRecognitionFrame *frame = (FaceRecognitionFrame*)malloc(sizeof(FaceRecognitionFrame));
+    if (!frame) {
+        RK_MPI_MB_ReleaseBuffer(src_mb);
+        return NULL;
+    }
 
+    frame->size = RK_MPI_MB_GetSize(src_mb);
+    frame->file = malloc(frame->size);
+    if (!frame->file) {
+        RK_MPI_MB_ReleaseBuffer(src_mb);
+        free(frame);
+        return NULL;
+    }
+
+    memcpy(frame->file, RK_MPI_MB_GetPtr(src_mb), frame->size);
     RK_MPI_MB_ReleaseBuffer(src_mb);
     return frame;
 }

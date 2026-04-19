@@ -18,6 +18,7 @@ Copyright © Deng Zhimao Co., Ltd. 1990-2030. All rights reserved.
 #include <QBuffer>
 #include <QTime>
 #include <QQuickItem>
+#include <cstdlib>
 
 #include "facerecognitioncamerathread.h"
 //FaceRecognitionCaptureThread定义了信号resultReady(QImage)
@@ -63,11 +64,14 @@ public:
         while (startFlag && m_RecognitionThread->camera_init_success) {
             msleep(33);
             FaceRecognitionFrame *frame = GetFaceRecognitionMediaBuffer();
-            if (frame) {
+            if (frame && frame->file) {
                 QImage qImage((unsigned char *)frame->file, 720, 1280, QImage::Format_RGB888);
-                emit resultReady(qImage);
+                emit resultReady(qImage.copy());
             }
-            delete frame;
+            if (frame) {
+                free(frame->file);
+                free(frame);
+            }
         }
 #endif
     }
