@@ -25,6 +25,9 @@ char *readLine(FILE *fp, char *buffer, int *len)
     int i = 0;
     size_t buff_len = 0;
 
+    if (fp == NULL || len == NULL)
+        return NULL;
+
     buffer = (char *)malloc(buff_len + 1);
     if (!buffer)
         return NULL; // Out of memory
@@ -59,7 +62,13 @@ char *readLine(FILE *fp, char *buffer, int *len)
 int readLines(const char *fileName, char *lines[], int max_line)
 {
     FILE *file = fopen(fileName, "r");
-    char *s;
+    if (file == NULL)
+    {
+        printf("open label file %s fail!\n", fileName);
+        return -1;
+    }
+
+    char *s = NULL;
     int i = 0;
     int n = 0;
     while ((s = readLine(file, s, &n)) != NULL)
@@ -68,13 +77,19 @@ int readLines(const char *fileName, char *lines[], int max_line)
         if (i >= max_line)
             break;
     }
+    fclose(file);
     return i;
 }
 
 int loadLabelName(const char *locationFilename, char *label[])
 {
     printf("loadLabelName %s\n", locationFilename);
-    readLines(locationFilename, label, OBJ_CLASS_NUM);
+    int count = readLines(locationFilename, label, OBJ_CLASS_NUM);
+    if (count < OBJ_CLASS_NUM)
+    {
+        printf("loadLabelName failed, label count=%d\n", count);
+        return -1;
+    }
     printf("loadLabelName end\n");
     return 0;
 }
@@ -107,7 +122,7 @@ static int nms(int validCount, std::vector<float> &outputLocations, std::vector<
         for (int j = i + 1; j < validCount; ++j)
         {
             int m = order[j];
-            
+
             // 如果待比较框已经被抑制，跳过
             if (m == -1)
             {
@@ -229,7 +244,7 @@ static int process(uint8_t *input, int *anchor, int grid_h, int grid_w, int heig
                 {
                     // 找到最大的类别概率
                     uint8_t maxClassProbs = in_ptr[5];
-                    
+
                     //printf("in_ptr[5] = %u\t", in_ptr[5]);
                     int maxClassId = 0;
                     for (int k = 1; k < OBJ_CLASS_NUM; ++k)
@@ -277,6 +292,12 @@ int post_process(uint8_t *input0, uint8_t *input1, uint8_t *input2, int model_in
                  std::vector<uint8_t> &qnt_zps, std::vector<float> &qnt_scales,
                  detect_result_group_t *group)
 {
+    if (group == NULL || input0 == NULL || input1 == NULL || input2 == NULL ||
+        qnt_zps.size() < 3 || qnt_scales.size() < 3 || scale_w == 0.0f || scale_h == 0.0f)
+    {
+        return -1;
+    }
+
     static int init = -1;
     if (init == -1)
     {
@@ -332,29 +353,37 @@ int post_process(uint8_t *input0, uint8_t *input1, uint8_t *input2, int model_in
 	nms(validCount, filterBoxes, classId,indexArray, nms_threshold);
 
     int last_count = 0;
-    int k = 1;
     group->count = 0;
     /* box valid detect target */
     for (int i = 0; i < validCount; ++i)
     {
-        if (indexArray[i] == -1 || boxesScore[i] < vis_threshold || i >= OBJ_NUMB_MAX_SIZE)
+        if (indexArray[i] == -1 || boxesScore[i] < vis_threshold)
         {
             continue;
         }
+        if (last_count >= OBJ_NUMB_MAX_SIZE)
+        {
+            break;
+        }
         int n = indexArray[i];
-        
+
         float x1 = filterBoxes[n * 4 + 0];
         float y1 = filterBoxes[n * 4 + 1];
         float x2 = x1 + filterBoxes[n * 4 + 2];
         float y2 = y1 + filterBoxes[n * 4 + 3];
         int id = classId[n];
+        if (id < 0 || id >= OBJ_CLASS_NUM || labels[id] == NULL)
+        {
+            continue;
+        }
         group->results[last_count].box.left = (int)(clamp(x1, 0, model_in_w) / scale_w);
         group->results[last_count].box.top = (int)(clamp(y1, 0, model_in_h) / scale_h);
         group->results[last_count].box.right = (int)(clamp(x2, 0, model_in_w) / scale_w);
         group->results[last_count].box.bottom = (int)(clamp(y2, 0, model_in_h) / scale_h);
         group->results[last_count].prop = boxesScore[n];
         char *label = labels[id];
-        strncpy(group->results[last_count].name, label, OBJ_NAME_MAX_SIZE);
+        strncpy(group->results[last_count].name, label, OBJ_NAME_MAX_SIZE - 1);
+        group->results[last_count].name[OBJ_NAME_MAX_SIZE - 1] = '\0';
         // printf("result %2d: (%4d, %4d, %4d, %4d), %s\n", i, group->results[last_count].box.left, group->results[last_count].box.top,
         //        group->results[last_count].box.right, group->results[last_count].box.bottom, label);
         last_count++;
