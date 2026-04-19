@@ -11,6 +11,7 @@ Copyright © Deng Zhimao Co., Ltd. 1990-2030. All rights reserved.
 #include "facerecognitionitem.h"
 #include <QDebug>
 #include <QCoreApplication>
+#include <cstdlib>
 FaceRecognitionItem::FaceRecognitionItem(QQuickItem *parent) : QQuickItem(parent)
 {
     setFlag(ItemHasContents, true);
@@ -81,9 +82,20 @@ QSGNode * FaceRecognitionItem::updatePaintNode(QSGNode *oldNode, QQuickItem::Upd
 void FaceRecognitionItem::saveimage()
 {
     FaceRecognitionFrame *frame = GetFace();
+    if (!frame || !frame->file) {
+        if (frame) {
+            free(frame->file);
+            free(frame);
+        }
+        return;
+    }
+
     QImage image((unsigned char *)frame->file, 112, 112, QImage::Format_RGB888);
     QMatrix leftmatrix;
-    m_imageThumb = image.transformed(leftmatrix, Qt::SmoothTransformation);
+    m_imageThumb = image.copy().transformed(leftmatrix, Qt::SmoothTransformation);
+    free(frame->file);
+    free(frame);
+
     QFile file(picture_name);
     if (file.exists()) {
         qDebug() << "File already exists: " << picture_name << ", overwriting...";// 若文件存在，会直接覆盖
