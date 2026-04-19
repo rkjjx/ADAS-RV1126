@@ -16,6 +16,7 @@ int open_db()
     {
         fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
         sqlite3_close(db);
+        db = NULL;
         exit(1);
     }
     else
@@ -31,9 +32,9 @@ int open_db()
         "name TEXT,"\
         "size INTEGER,"\
         "feature BLOB);";
-        
+
         rc = sqlite3_exec(db, sql, NULL, 0, &zErrMsg);
-        if (rc != SQLITE_OK) 
+        if (rc != SQLITE_OK)
         {
             fprintf(stderr, "SQL error: %s\n", zErrMsg);
             sqlite3_free(zErrMsg);
@@ -41,17 +42,22 @@ int open_db()
         }
         sqlite3_free(zErrMsg);
     }
- 
+
     return 0;
 }
 
 
 void insert_face_data_to_database(const char *name, int featureSize, float feature[512])
 {
+    if (db == NULL || name == NULL || feature == NULL || featureSize <= 0 || featureSize > 512) {
+        printf("Invalid face data, name=%s, featureSize=%d\n", name ? name : "NULL", featureSize);
+        return;
+    }
+
     // 打印前几个 feature，避免刷屏
     printf("== 插入前检查: name=%s, featureSize=%d ==\n", name, featureSize);
-    for (int i = 0; i < 512; i++) {
-        if (i < 5 || i >= 498) {
+    for (int i = 0; i < featureSize; i++) {
+        if (i < 5 || i >= featureSize - 14) {
             printf("feature[%d] = %f\n", i, feature[i]);
         }
     }
@@ -96,6 +102,10 @@ int get_face_data_from_database(const char *name, float feature_out[512], int *f
     sqlite3_stmt *stmt = NULL;
     int rc;
 
+    if (db == NULL || name == NULL || feature_out == NULL || featureSize_out == NULL) {
+        return -1;
+    }
+
     // 1. 准备语句
     rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
@@ -122,7 +132,7 @@ int get_face_data_from_database(const char *name, float feature_out[512], int *f
         const void *blob = sqlite3_column_blob(stmt, 1);
         int bytes = sqlite3_column_bytes(stmt, 1);
 
-        if (blob && bytes == size * sizeof(float)) {
+        if (blob && size > 0 && size <= 512 && bytes == size * (int)sizeof(float)) {
             memcpy(feature_out, blob, bytes);
 
             // 打印前几个值验证
@@ -147,7 +157,7 @@ int get_face_data_from_database(const char *name, float feature_out[512], int *f
 
 map<string, rockx_face_feature_t> FaceFeature()
 {
-    sqlite3_stmt *stmt;
+    sqlite3_stmt *stmt = NULL;
     char *sql = "select name, size, feature from face_table";
     int ret = sqlite3_prepare(db, sql, strlen(sql), &stmt, 0);
     //int id;
@@ -174,12 +184,21 @@ map<string, rockx_face_feature_t> FaceFeature()
             printf("id = %d\n", id);*/
 
             name = (char *)sqlite3_column_text(stmt, 0);
+            if (name == NULL) {
+                continue;
+            }
             printf("name = %s\n", name);
             size = sqlite3_column_int(stmt, 1);
             //printf("size = %d\n", size);
             const void *feature = sqlite3_column_blob(stmt, 2);
-            
-            memset(rockx_face_feature.feature, 0, size*sizeof(float));
+            int bytes = sqlite3_column_bytes(stmt, 2);
+
+            if (feature == NULL || size <= 0 || size > 512 || bytes != size * (int)sizeof(float)) {
+                printf("Skip invalid face feature: name=%s, size=%d, bytes=%d\n", name, size, bytes);
+                continue;
+            }
+
+            memset(rockx_face_feature.feature, 0, sizeof(rockx_face_feature.feature));
             memcpy(rockx_face_feature.feature, feature, size*sizeof(float));
             rockx_face_feature.len = size;
             string str(name);
@@ -187,9 +206,14 @@ map<string, rockx_face_feature_t> FaceFeature()
         }
         printf("###############################################\n\n");
     }
-    
-    sqlite3_finalize(stmt);
-    sqlite3_close(db); 
-    
+    else
+    {
+        printf("Prepare face feature query failed: %s\n", db ? sqlite3_errmsg(db) : "db is NULL");
+    }
+
+    if (stmt) {
+        sqlite3_finalize(stmt);
+    }
+
     return rockx_face_feature_map;
 }
